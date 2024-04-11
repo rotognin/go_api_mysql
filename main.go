@@ -24,7 +24,9 @@ type album struct {
 func main() {
 	router := gin.Default()
 	router.GET("/albums", getAlbums)
-	router.POST("/albums", postAlbums) // Inserir um novo album no banco
+	router.GET("/albums/:id", getAlbumByID)
+	router.POST("/albums", postAlbum) // Inserir um novo album no banco
+	router.PATCH("/albums", updateAlbum) // Atualizar um álbum no banco
 	
 	router.Run("localhost:8180")
 }
@@ -44,6 +46,21 @@ func connectDB(c *gin.Context) {
 	dbx.conn = db
 }
 
+func getAlbumByID(c *gin.Context) {
+	connectDB(c)
+
+	var registro album
+	id := c.Param("id")
+
+	err := dbx.conn.QueryRow("SELECT * FROM albums WHERE alb_id_album = ?", id).Scan(&registro.ID, &registro.Title, &registro.Artist, &registro.Price, &registro.IDBanco)
+
+	if err == sql.ErrNoRows {
+		c.IndentedJSON(http.StatusOK, gin.H{"message": "Álbum não encontrado."})
+		return
+	}
+
+	c.IndentedJSON(http.StatusOK, registro)
+}
 
 // Obter todos os registros cadastrados no banco
 func getAlbums(c *gin.Context) {
@@ -73,7 +90,15 @@ func getAlbums(c *gin.Context) {
 
 }
 
-func postAlbums(c *gin.Context) {
+func postAlbum(c *gin.Context) {
+	insertOrUpdateAlbum(c, "insert")
+}
+
+func updateAlbum(c *gin.Context) {
+	insertOrUpdateAlbum(c, "update")
+}
+
+func insertOrUpdateAlbum(c *gin.Context, action string) {
 	connectDB(c)
 
 	var newAlbum album
@@ -97,8 +122,16 @@ func postAlbums(c *gin.Context) {
 
 	row := dbx.conn.QueryRow("SELECT * FROM albums WHERE alb_id_album = ?", newAlbum.ID)
 	if err := row.Scan(&albums.IDBanco, &albums.Title, &albums.Artist, &albums.Price, &albums.ID); err == nil {
-		msg += " ID do álbum já cadastrado."
-	} 
+		if action == "insert" {
+			c.IndentedJSON(http.StatusOK, gin.H{"message": "ID do álbum já cadastrado."})
+			return
+		}
+	}
+
+	if err != nil && action == "update" {
+		c.IndentedJSON(http.StatusOK, gin.H{"message": "Álbum não cadastrado. Não será atualizado"})
+		return
+	}
 
 	// Validar o Título do Álbum
 	newAlbum.Title = regexp.MustCompile(`[^a-zA-Z0-9 ,._-]+`).ReplaceAllString(newAlbum.Title, "")
@@ -130,8 +163,17 @@ func postAlbums(c *gin.Context) {
 		return
 	}
 
+	var sql string
+
+	switch action {
+		case "insert":
+			sql = "INSERT INTO albums (alb_title, alb_artist, alb_price, alb_id_album) VALUES (?, ?, ?, ?)"
+		case "update":
+			sql = "UPDATE albums SET alb_title = ?, alb_artist = ?, alb_price = ? WHERE alb_id_album = ?"
+	}
+
 	// Ao chegar até aqui, está OK para inserir as informações no banco
-	stmt, err := dbx.conn.Prepare("INSERT INTO albums (alb_title, alb_artist, alb_price, alb_id_album) VALUES (?, ?, ?, ?)")
+	stmt, err := dbx.conn.Prepare(sql)
 	if err != nil {
 		var erro string
 		erro = err.Error()
@@ -143,7 +185,7 @@ func postAlbums(c *gin.Context) {
 	if err != nil {
 		var erro string
 		erro = err.Error()
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Erro ao executar inserção", "error": erro})
+		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Erro ao executar a operação", "error": erro})
 		return
 	}
 
