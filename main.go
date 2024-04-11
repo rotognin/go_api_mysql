@@ -21,20 +21,10 @@ type album struct {
 	IDBanco int64  `json:"id_banco"` // ID autoincremental do banco
 }
 
-// albums slice to seed record album data.
-var albums = []album{
-	{ID: "1", Title: "Blue Train", Artist: "John Coltrane", Price: 56.99},
-	{ID: "2", Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
-	{ID: "3", Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
-}
-
 func main() {
 	router := gin.Default()
 	router.GET("/albums", getAlbums)
-	router.GET("/albums/:id", getAlbumByID)
 	router.POST("/albums", postAlbums) // Inserir um novo album no banco
-	router.GET("/info", infoService) // Informações sobre o serviço
-	router.GET("/inserir", inserirInfo) // Testar a inserção de informações no banco
 	
 	router.Run("localhost:8180")
 }
@@ -54,37 +44,33 @@ func connectDB(c *gin.Context) {
 	dbx.conn = db
 }
 
-func inserirInfo(c *gin.Context) {
+
+// Obter todos os registros cadastrados no banco
+func getAlbums(c *gin.Context) {
+	//c.IndentedJSON(http.StatusOK, albums)
 	connectDB(c)
 
-	stmt, err := dbx.conn.Prepare("INSERT INTO albums (alb_title, alb_artist, alb_price) VALUES (?, ?, ?)")
+	var registros album
+	var albums []album
+
+	rows, err := dbx.conn.Query("SELECT * FROM albums")
 	if err != nil {
-		var erro string
-		erro = err.Error()
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Erro no prepare do banco", "error": erro})
+		c.IndentedJSON(http.StatusOK, gin.H{"message": "Não foi possível realizar a consulta"})
+		return
 	}
 
-	_, err = stmt.Exec("Segundo", "Jorge Fruit", 10.00)
-	if err != nil {
-		var erro string
-		erro = err.Error()
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Erro ao executar inserção", "error": erro})
+	for rows.Next() {
+		err := rows.Scan(&registros.ID, &registros.Title, &registros.Artist, &registros.Price, &registros.IDBanco)
+		if err != nil {
+			c.IndentedJSON(http.StatusOK, gin.H{"message": "Não foi possível obter os resultados do banco"})
+			return
+		}
+
+		albums = append(albums, registros)
 	}
 
-	var info string
-	info = "Dados inseridos com sucesso!"
-	c.IndentedJSON(http.StatusOK, gin.H{"message": info})
-}
-
-func infoService(c *gin.Context) {
-	var info string
-	info = "Serviço rodando em Go por webservice"
-	c.IndentedJSON(http.StatusOK, gin.H{"message": info})
-}
-
-// getAlbums responds with the list of all albums as JSON. (pode ser dado qualquer nome, não precisa ser esse)
-func getAlbums(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, albums)
+
 }
 
 func postAlbums(c *gin.Context) {
@@ -162,18 +148,4 @@ func postAlbums(c *gin.Context) {
 	}
 
 	c.IndentedJSON(http.StatusOK, gin.H{"message": "Operação realizada com sucesso", "msg": msg})
-}
-
-func getAlbumByID(c *gin.Context) {
-	id := c.Param("id")
-
-	// Loop over the list of albums, looking for
-	// an album whose ID value matches the parameter.
-	for _, a := range albums {
-		if a.ID == id {
-			c.IndentedJSON(http.StatusOK, a)
-			return
-		}
-	}
-	c.IndentedJSON(http.StatusNotFound, gin.H{"message": "album not found", "error": "Sem informações"})
 }
