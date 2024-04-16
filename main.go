@@ -5,7 +5,6 @@ package main
 import (
 	"net/http"
 	"database/sql"
-	"time"
 	"regexp"
 
 	"github.com/gin-gonic/gin"
@@ -29,21 +28,6 @@ func main() {
 	router.PATCH("/albums", updateAlbum) // Atualizar um álbum no banco
 	
 	router.Run("localhost:8180")
-}
-
-func connectDB(c *gin.Context) {
-	db, err := sql.Open("mysql", "root:euaquinanet@tcp(127.0.0.1:3308)/albums_go")
-	if err != nil {
-		var erro string
-		erro = err.Error()
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "Não foi aberto a conexão com o banco", "error": erro})
-	}
-
-	db.SetConnMaxLifetime(time.Minute * 3)
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(10)
-
-	dbx.conn = db
 }
 
 func getAlbumByID(c *gin.Context) {
